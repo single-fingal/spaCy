@@ -1,3 +1,4 @@
+import re
 import warnings
 
 
@@ -36,8 +37,9 @@ def filter_warning(action: str, error_msg: str):
 
 
 def _escape_warning_msg(msg):
-    """To filter with warnings.filterwarnings, the [] brackets need to be escaped"""
-    return msg.replace("[", "\\[").replace("]", "\\]")
+    """To filter with warnings.filterwarnings, the [] brackets--and other
+    regex characters--need to be escaped"""
+    return re.escape(msg)
 
 
 # fmt: off
