@@ -50,7 +50,19 @@ class SpanGroups(UserDict):
         # we need to know which key will map to which group. (See #10685)
         if len(self) == 0:
             return self._EMPTY_BYTES
-        msg = {key: value.to_bytes() for key, value in self.items()}
+
+        # Since SpanGroup objects can currently be the value of multiple `SpanGroups` keys,
+        # we serialize each SpanGroup object once.
+        # Then, upon deserialization, any SpanGroup that happened to be a value
+        # for more than 1 key will be present only once in the resulting `SpanGroups`.
+        id_bytes_keys = {}
+        for key, value in self.items():
+            value_id = id(value)
+            if value_id not in id_bytes_keys:
+                id_bytes_keys[value_id] = [value.to_bytes(), key]
+            else:
+                id_bytes_keys[value_id].append(key)
+        msg = {value_bytes: keys for value_bytes, *keys in id_bytes_keys.values()}
         return srsly.msgpack_dumps(msg)
 
     def from_bytes(self, bytes_data: bytes) -> "SpanGroups":
@@ -62,10 +74,13 @@ class SpanGroups(UserDict):
         if bytes_data and bytes_data != self._EMPTY_BYTES:
             msg = srsly.msgpack_loads(bytes_data)
             if isinstance(msg, dict):
-                for key, value_bytes in msg.items():
+                # The 2nd version of `SpanGroups` serialization
+                for value_bytes, keys in msg.items():
                     group = SpanGroup(doc).from_bytes(value_bytes)
-                    self[key] = group
+                    for key in keys:
+                        self[key] = group
             elif isinstance(msg, list):
+                # The 1st version of `SpanGroups` serialization
                 for value_bytes in msg:
                     group = SpanGroup(doc).from_bytes(value_bytes)
                     group_name = group.name
