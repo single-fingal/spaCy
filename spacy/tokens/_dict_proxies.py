@@ -1,7 +1,7 @@
 from typing import Iterable, Tuple, Union, Optional, TYPE_CHECKING
 import warnings
 import weakref
-from collections import UserDict
+from collections import defaultdict, UserDict
 import srsly
 
 from .span_group import SpanGroup
@@ -50,20 +50,10 @@ class SpanGroups(UserDict):
         # we need to know which key will map to which group. (See #10685)
         if len(self) == 0:
             return self._EMPTY_BYTES
-
-        # Since SpanGroup objects can currently be the value of multiple `SpanGroups` keys,
-        # we serialize each SpanGroup object once.
-        # Then, upon deserialization, any SpanGroup that happened to be a value
-        # for more than 1 key will be present only once in the resulting `SpanGroups`.
-        id_bytes_keys = {}
+        bytes_keys = defaultdict(list)
         for key, value in self.items():
-            value_id = id(value)
-            if value_id not in id_bytes_keys:
-                id_bytes_keys[value_id] = [value.to_bytes(), key]
-            else:
-                id_bytes_keys[value_id].append(key)
-        msg = {value_bytes: keys for value_bytes, *keys in id_bytes_keys.values()}
-        return srsly.msgpack_dumps(msg)
+            bytes_keys[value.to_bytes()].append(key)
+        return srsly.msgpack_dumps(bytes_keys)
 
     def from_bytes(self, bytes_data: bytes) -> "SpanGroups":
         self.clear()
@@ -74,13 +64,19 @@ class SpanGroups(UserDict):
         if bytes_data and bytes_data != self._EMPTY_BYTES:
             msg = srsly.msgpack_loads(bytes_data)
             if isinstance(msg, dict):
-                # The 2nd version of `SpanGroups` serialization
+                # The ~2nd version of `SpanGroups` serialization
                 for value_bytes, keys in msg.items():
                     group = SpanGroup(doc).from_bytes(value_bytes)
-                    for key in keys:
-                        self[key] = group
+                    # Set the first key to the SpanGroup just created.
+                    # Set any remaining keys to copies of that SpanGroup,
+                    # because we can't assume they were all the same identical object:
+                    # it's possible that 2 different SpanGroup objects (pre-serialization)
+                    # had the same bytes, and mapped to the same `msg` key.
+                    self[keys[0]] = group
+                    for key in keys[1:]:
+                        self[key] = group.copy()
             elif isinstance(msg, list):
-                # The 1st version of `SpanGroups` serialization
+                # The ~1st version of `SpanGroups` serialization
                 for value_bytes in msg:
                     group = SpanGroup(doc).from_bytes(value_bytes)
                     group_name = group.name

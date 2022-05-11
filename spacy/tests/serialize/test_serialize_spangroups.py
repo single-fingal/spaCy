@@ -34,19 +34,6 @@ def test_issue10685(en_tokenizer):
     assert_spangroups()
 
 
-def test_serialize_spangroups_once(en_tokenizer):
-    """Test that SpanGroup objects that are values of multiple `SpanGroups` keys
-    are present only once in the deserialized `SpanGroups` object."""
-    doc = en_tokenizer("Will it blend?")
-    spangroup = SpanGroup(doc, spans=[doc[0:1]])
-    doc.spans["a"] = spangroup
-    doc.spans["b"] = spangroup
-    assert doc.spans["a"] is doc.spans["b"]
-
-    doc.spans.from_bytes(doc.spans.to_bytes())
-    assert doc.spans["a"] is doc.spans["b"]
-
-
 @pytest.mark.parametrize(
     "spans_bytes,expected_spangroups,expected_warning",
     [
