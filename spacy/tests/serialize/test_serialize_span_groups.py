@@ -1,4 +1,5 @@
 import pytest
+import warnings
 
 from spacy.tokens import Span, SpanGroup
 from spacy.tokens._dict_proxies import SpanGroups
@@ -134,8 +135,10 @@ def test_deserialize_span_groups_compat(
         with pytest.warns(UserWarning):
             doc.spans.from_bytes(spans_bytes)
     else:
-        # TODO: explicitly check for lack of a warning
-        doc.spans.from_bytes(spans_bytes)
+        # Ensure there's no warning
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", category=UserWarning)
+            doc.spans.from_bytes(spans_bytes)
 
     assert doc.spans.keys() == expected_spangroups.keys()
     for name, spangroup_args in expected_spangroups.items():
